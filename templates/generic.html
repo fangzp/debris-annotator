@@ -2,7 +2,7 @@
 
 <html>
 	<head>
-		<title>Image Annotator</title>
+		<title>Debris Annotator</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<!--[if lte IE 8]><script src="static/js/ie/html5shiv.js"></script><![endif]-->
@@ -10,6 +10,58 @@
 		<link rel="stylesheet" href="static/css/jqtree.css">
 		<!--[if lte IE 9]><link rel="stylesheet" href="static/css/ie9.css" /><![endif]-->
 		<!--[if lte IE 8]><link rel="stylesheet" href="static/css/ie8.css" /><![endif]-->
+		<style>
+			#metadata-form {
+				background: #f7f7f7;
+				border: 1px solid #ccc;
+				border-radius: 6px;
+				padding: 12px 16px;
+				margin-bottom: 12px;
+				font-family: Monaco, monospace;
+				font-size: 13px;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 10px 20px;
+				align-items: flex-end;
+			}
+			#metadata-form label {
+				display: block;
+				font-weight: bold;
+				margin-bottom: 2px;
+			}
+			#metadata-form .field {
+				display: flex;
+				flex-direction: column;
+			}
+			#metadata-form input[type=text],
+			#metadata-form select,
+			#metadata-form textarea {
+				font-family: Monaco, monospace;
+				font-size: 12px;
+				padding: 3px 6px;
+				border: 1px solid #aaa;
+				border-radius: 3px;
+			}
+			#metadata-form textarea {
+				resize: vertical;
+				height: 38px;
+				width: 180px;
+			}
+			#metadata-form input[readonly] {
+				background: #e8e8e8;
+				color: #555;
+			}
+			#save-status {
+				font-family: Monaco, monospace;
+				font-size: 13px;
+				padding: 4px 10px;
+				border-radius: 4px;
+				display: none;
+				margin-top: 6px;
+			}
+			#save-status.success { background: #d4edda; color: #155724; }
+			#save-status.error   { background: #f8d7da; color: #721c24; }
+		</style>
 	</head>
 	<body>
 
@@ -18,10 +70,8 @@
 
 				<!-- Header -->
 					<header id="header" style="padding: 2em 1em 1em 1em">
-						<h1>IDEAS: Intelligent DEep Annotator for Segmentation</h1>
-                        <a href="https://ideas.eecs.oregonstate.edu/help" style="color:blue; text-decoration:underline;">[<i class="fa fa-book" aria-hidden="true"></i>user instructions]</a>
-                        <a href="https://youtu.be/9Nu74INL5CA" style="color:red; text-decoration:underline;">[<i class="fa fa-youtube-play" aria-hidden="true"></i>demo video]</a>
-						<p style="margin:0.5em">An effective annotation tool to build high-quality image datasets with pixelwise object and category annotation.</p>
+						<h1>Debris Annotation Tool</h1>
+						<p style="margin:0.5em">Post-disaster debris segmentation labeling. Fill in the metadata form before annotating each chip.</p>
 					</header>
 
 
@@ -29,6 +79,44 @@
 					<div id="main" style="overflow:scroll">
 						<input name="color2" type="hidden" id="color_value" value="99cc00">
         		        <button id="colorSelector" class="jscolor {valueElement: 'color_value'}" style="display: none; font-size: 12px; width: 60%;">Pick a color</button>
+
+						<!-- Metadata form -->
+						<div id="metadata-form">
+							<div class="field">
+								<label for="meta-chip-id">Chip ID</label>
+								<input type="text" id="meta-chip-id" name="chip_id" readonly placeholder="(load an image)" style="width:160px">
+							</div>
+							<div class="field">
+								<label for="meta-labeler-id">Labeler ID <span style="color:red">*</span></label>
+								<input type="text" id="meta-labeler-id" name="labeler_id" placeholder="your ID" style="width:100px" required>
+							</div>
+							<div class="field">
+								<label for="meta-hazard-type">Hazard Type</label>
+								<select id="meta-hazard-type" name="hazard_type">
+									<option value="hurricane">hurricane</option>
+									<option value="tornado">tornado</option>
+									<option value="wildfire">wildfire</option>
+									<option value="flood">flood</option>
+									<option value="unknown">unknown</option>
+								</select>
+							</div>
+							<div class="field">
+								<label for="meta-pre-event-ref">Pre-event Ref</label>
+								<select id="meta-pre-event-ref" name="pre_event_ref">
+									<option value="none">none</option>
+									<option value="google_basemap">google_basemap</option>
+								</select>
+							</div>
+							<div class="field" style="flex-direction:row; align-items:center; gap:6px">
+								<input type="checkbox" id="meta-uncertain-flag" name="uncertain_flag" style="margin-top:18px">
+								<label for="meta-uncertain-flag" style="margin-top:18px">Uncertain</label>
+							</div>
+							<div class="field">
+								<label for="meta-notes">Notes (optional)</label>
+								<textarea id="meta-notes" name="notes" placeholder="e.g. mixed debris, cloud cover..."></textarea>
+							</div>
+						</div>
+						<div id="save-status"></div>
 
 						<!-- Content -->
 							<section id="content" class="main">
@@ -41,7 +129,6 @@
 
 				<!-- Footer -->
 					<footer id="footer", style="padding:2em 1em 1em 1em">
-                        <p class="copyright", style="margin:0.2em">[Acknolegement]: we thank the National Science Foundation Plant Genome Research Program for funding, “Analysis of Genes Affecting Plant Regeneration and Transformation in Poplar.” IOS # 1546900.</p>
 						<p class="copyright", style="margin:0.5em">&copy; Deep Machine Vision Group. Design: <a href="https://html5up.net">HTML5 UP</a>.</p>
 					</footer>
 
@@ -64,5 +151,156 @@
 			<script src="static/js/FileSaver.min.js"></script>
 			<script src="//cdnjs.cloudflare.com/ajax/libs/mousetrap/1.4.6/mousetrap.min.js"></script>
 			<script src="//cdnjs.cloudflare.com/ajax/libs/mousetrap/1.4.6/mousetrap-bind-dictionary.min.js"></script>
+
+			<script>
+			$(function() {
+				// ---- Persist labeler_id in localStorage ----
+				var storedId = localStorage.getItem('debris_labeler_id');
+				if (storedId) {
+					$('#meta-labeler-id').val(storedId);
+				}
+				$('#meta-labeler-id').on('change', function() {
+					localStorage.setItem('debris_labeler_id', $(this).val());
+				});
+
+				// ---- Auto-populate chip_id when annotator loads an image ----
+				// Poll for the annotator's current image name and update the chip_id field.
+				// The annotator stores the current image in window._annoInst (set below) or
+				// via a MutationObserver on the title/canvas area. We use a simple event hook
+				// by monkey-patching imgLoader after DOMContentLoaded.
+				$(document).on('debris:image-loaded', function(e, fname) {
+					$('#meta-chip-id').val(fname);
+				});
+
+				// ---- Fetch and lock-in the fixed class list ----
+				// Hide the class-editing UI elements once the annotator renders them.
+				// We use a short poll since annotator.js builds the UI dynamically.
+				function hideClassEditUI() {
+					// Input for new class name
+					$('#classname').hide();
+					// Add and clear buttons in the class panel
+					$('#class-tab #add').hide();
+					$('#class-tab #clear').hide();
+					// Color selector
+					$('#colorSelector').hide();
+					$('#color_value').hide();
+					// delete / delete-all in class panel
+					$('#class-tab #delete').hide();
+					$('#class-tab [id="delete all"]').hide();
+					// "add to hierarchy" connector
+					$('#class-tab #tohie').hide();
+					$('#class-tab #hieopt').hide();
+					$('#class-tab #errorMsg').hide();
+				}
+
+				function loadFixedClasses(annotator) {
+					$.get('/get_classes', function(classes) {
+						for (var i = 0; i < classes.length; i++) {
+							var cls = classes[i];
+							// strip '#' — addAnnoClass expects hex without #
+							var color = cls.color.replace('#', '');
+							annotator.addAnnoClass(
+								cls.name,
+								color,
+								null,
+								annotator.$selectClassFrame,
+								annotator.$errorMsg
+							);
+							annotator.addAnnoClassToHiePanel(cls.name, color);
+						}
+						// Pre-select first class
+						var firstNode = annotator.$selectClassFrame.tree('getNodeById', 1);
+						if (firstNode) {
+							annotator.$selectClassFrame.tree('selectNode', firstNode);
+							annotator.selectedClass = firstNode;
+							$(firstNode.element).children('div').addClass('highlight');
+						}
+						hideClassEditUI();
+					});
+				}
+
+				// Wait for annotator instance to be available
+				var classLoadInterval = setInterval(function() {
+					var $cw = $('#canvas-wrapper');
+					var data = $cw.data('annotator');
+					if (data && data.$selectClassFrame) {
+						clearInterval(classLoadInterval);
+						loadFixedClasses(data);
+					}
+				}, 200);
+
+				// ---- Hook the Save button to also POST metadata ----
+				// The save button is created dynamically by annotator.js; poll for it.
+				var saveHookInterval = setInterval(function() {
+					var $saveBtn = $('button.file-controler-item').filter(function() {
+						return $(this).text().trim() === 'save label';
+					});
+					if ($saveBtn.length) {
+						clearInterval(saveHookInterval);
+						$saveBtn.on('click.metadata', function() {
+							saveMetadata();
+						});
+					}
+				}, 300);
+
+				function saveMetadata() {
+					var chipId = $('#meta-chip-id').val();
+					var labelerId = $('#meta-labeler-id').val();
+					if (!labelerId) {
+						showSaveStatus('Please enter your Labeler ID before saving.', false);
+						return;
+					}
+					var payload = {
+						chip_id:       chipId || 'unknown',
+						labeler_id:    labelerId,
+						hazard_type:   $('#meta-hazard-type').val(),
+						pre_event_ref: $('#meta-pre-event-ref').val(),
+						uncertain_flag: $('#meta-uncertain-flag').is(':checked'),
+						notes:         $('#meta-notes').val()
+					};
+					$.ajax({
+						url: '/save_metadata',
+						method: 'POST',
+						contentType: 'application/json',
+						data: JSON.stringify(payload),
+						success: function(resp) {
+							if (resp.success) {
+								showSaveStatus('Saved: annotation + metadata for ' + (chipId || 'unknown'), true);
+							} else {
+								showSaveStatus('Metadata save failed.', false);
+							}
+						},
+						error: function() {
+							showSaveStatus('Metadata save error — check server.', false);
+						}
+					});
+				}
+
+				function showSaveStatus(msg, ok) {
+					var $s = $('#save-status');
+					$s.text(msg)
+					  .removeClass('success error')
+					  .addClass(ok ? 'success' : 'error')
+					  .show();
+					setTimeout(function() { $s.fadeOut(); }, 4000);
+				}
+
+				// ---- Update chip_id when a new image is loaded ----
+				// Patch into imgLoader by observing mutations on #canvas-wrapper children
+				var chipObserver = new MutationObserver(function() {
+					// After image load, annotator.js sets self.images; grab name from the
+					// file input value set by imgLoader or from the wrapperDiv title.
+					var $cw = $('#canvas-wrapper');
+					var data = $cw.data('annotator');
+					if (data && data.images && data.images.length > 0) {
+						var fname = data.images[data.curImgID] ? data.images[data.curImgID].name : '';
+						if (fname && fname !== $('#meta-chip-id').val()) {
+							$('#meta-chip-id').val(fname);
+						}
+					}
+				});
+				chipObserver.observe(document.getElementById('canvas-wrapper'), {childList: true, subtree: true});
+			});
+			</script>
 	</body>
 </html>

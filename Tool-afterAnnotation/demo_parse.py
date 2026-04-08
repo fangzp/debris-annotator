@@ -7,7 +7,23 @@ xml_config_fpath = 'data/robot-annotation.xml'
 in_annotated_path = 'data'
 
 
-categories = ['object', 'robot', 'shelf', 'table']
+categories = [
+    "Vegetative - Low",
+    "Vegetative - High",
+    "C&D - Low",
+    "C&D - High",
+]
+
+CLASS_GROUPS = {
+    "type": {
+        "Vegetative": ["Vegetative - Low", "Vegetative - High"],
+        "C&D":        ["C&D - Low",        "C&D - High"],
+    },
+    "density": {
+        "Low":  ["Vegetative - Low",  "C&D - Low"],
+        "High": ["Vegetative - High", "C&D - High"],
+    }
+}
 save_path = 'annotation'
 
 sem_postfix = '_class.png'

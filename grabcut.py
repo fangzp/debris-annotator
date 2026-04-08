@@ -1,4 +1,5 @@
 import io
+import os
 import time
 
 import numpy as np
@@ -10,17 +11,8 @@ from api.data_manipulation import construct_label, create_xml
 from api.data_manipulation import isPixelInBbox
 from config import cfg
 
-if cfg.DL_obj_sel_en:
-    # from DLearning_PosNeg_select import Setup_environment, DLearning_PosNeg
-    # global DLsession, DLinput, DLoutput
-    # DLsession, DLinput, DLoutput = Setup_environment()
-
-    from DLearning_PosNeg_select import Setup_environment_seg, DLearning_PosNeg
-    global DLsession, DLinput, DLoutput
-    DLsession, DLinput, DLoutput = Setup_environment_seg()
-
 import xml.etree.cElementTree as ET
-from flask import Flask, make_response, render_template, request, json, jsonify #, send_file
+from flask import Flask, make_response, render_template, request, json, jsonify
 app = Flask(__name__)
 
 @app.route("/")
@@ -31,6 +23,23 @@ def home():
 def help():
     print('try to render help page')
     return render_template('help.html')
+
+@app.route("/get_classes", methods=['GET'])
+def get_classes():
+    return jsonify(cfg.FIXED_CLASSES)
+
+@app.route("/save_metadata", methods=['POST'])
+def save_metadata():
+    data = request.get_json()
+    chip_id = data.get('chip_id', 'unknown')
+    # strip extension for directory name
+    chip_dir = chip_id.rsplit('.', 1)[0] if '.' in chip_id else chip_id
+    out_dir = os.path.join('./outputs', chip_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, chip_dir + '_metadata.json')
+    with open(out_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    return jsonify({'success': True})
 
 @app.route("/handle_action", methods=['POST'])
 def handle_action():
@@ -119,46 +128,6 @@ def handle_action():
                                      sx=0, sy=0)
         outputMask = mask
 
-    elif mode == "DL-ObjectSelect":
-        # TODO : Modify this.
-        # from tifffile import imread
-        # semInput = imread('../sgis-itis/data/semantic_results_instance/2008_003331_1.tif')
-
-        if cfg.DL_obj_sel_en:
-            if (len(neg_pts) <= cfg.GC_iter_count):
-                return json.dumps({'success':False, 'message': 'Neg points are not enough.'}),\
-                                   400, {'ContentType':'application/json'}
-            crop_box, dpMask = DLearning_PosNeg(DLsession,
-                                                semInput,
-                                                DLinput,
-                                                DLoutput,
-                                                pos_pts,
-                                                neg_pts,
-                                                imgArr,
-                                                negBbox=False)
-            if cfg.DBG_PRT:
-                prt_time.append(('       : -- DL done: ', time.time()))
-            x0,y0,x1,y1 = crop_box
-            boxMask = refine_mask_grabcut(imgArr[y0:y1, x0:x1, :],
-                                          dpMask.astype('uint8'),
-                                          cfg.GC_iter_count)
-            if cfg.DBG_PRT:
-                prt_time.append(('       : -- (DL & grabCut) done: ', time.time()))
-
-            boxMask = connectivity(boxMask,
-                                   pos_pts-np.asarray([[y0, x0]]),
-                                   sx=0, sy=0)
-            if cfg.DBG_PRT:
-                prt_time.append(('       : -- (DL & grabCut & conn) done: ', time.time()))
-
-            outputMask = np.zeros(imgArr.shape[:2], dtype=np.uint8)
-            outputMask[y0:y1, x0:x1] = boxMask
-        else:
-            # labeling of existing annotation.
-            mask = np.zeros((h, w), dtype=np.uint8)
-            mask = init_mask_from_points(mask, pos_pts)
-            outputMask = cv2.dilate(mask, np.ones([13, 13], np.uint8), iterations=1)
-
     else:
         return json.dumps({'success':False, 'message': 'Invalid mode.'}), \
                400, {'ContentType':'application/json'}
@@ -209,15 +178,19 @@ def xml_saver():
 
     f = io.BytesIO()
     tree.write(f, encoding='utf-8', xml_declaration=True)
-    xmlstr = f.getvalue()  # your XML file, encoded as UTF-8
-    #tree.write('test.xml')
+    xmlstr = f.getvalue()
+
+    # Also persist XML to ./outputs/{chip_id}/
+    fname = metaData.get('fname', 'unknown')
+    chip_dir = fname.rsplit('.', 1)[0] if '.' in fname else fname
+    out_dir = os.path.join('./outputs', chip_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, chip_dir + '.xml'), 'wb') as out_f:
+        out_f.write(xmlstr)
+
     response = make_response(xmlstr)
-    # This is the key: Set the right header for the response
-    # to be downloaded, instead of just printed on the browser
     response.headers["Content-disposition"] = "attachment;"
     response.mimetype="application/xml"
-
-    # tree.write('test.xml')
 
     return response
 
