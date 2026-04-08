@@ -261,31 +261,86 @@
 			});
 			chipObserver.observe(document.getElementById('canvas-wrapper'), {childList: true, subtree: true});
 
-			// ---- Fixed classes (mirrors config.py FIXED_CLASSES) ----
-			// Fetched from backend so there's a single source of truth.
-			var FIXED_CLASSES = [];
-			// Map class name → the hieUid of its class-subnode in the hierarchy tree
+			// Shared reference to the annotator instance, set when an image is loaded.
+			var annoRef = null;
+			// Map class name → hieUid of its class-subnode in the hierarchy tree.
 			var classSubnodeId = {};
 
-			$.get('/get_classes', function(classes) {
-				FIXED_CLASSES = classes;
+			// ---- Tool buttons — wired immediately so they're always responsive ----
+			$('.tool-btn[data-tool]').on('click', function() {
+				var tool = $(this).data('tool');
+				$('.tool-btn[data-tool]').removeClass('active');
+				$(this).addClass('active');
+				if (annoRef) {
+					annoRef.curTool = tool;
+					annoRef.metaData = [];
+				}
+			});
 
-				// Populate class dropdown
+			// ---- Brush size ----
+			$('#brush-size').on('change', function() {
+				if (annoRef) annoRef.lineWidth = parseInt($(this).val());
+			});
+
+			// ---- Mode ----
+			$('#mode-select').on('change', function() {
+				if (annoRef) annoRef.curMode = $(this).val();
+			});
+
+			// ---- Process button ----
+			$('#process-btn').on('click', function() {
+				$('#perform').click();
+			});
+
+			// ---- Undo / Redo / Clear ----
+			$('#btn-undo').on('click',      function() { $('#undoHis').click(); });
+			$('#btn-redo').on('click',      function() { $('#redoHis').click(); });
+			$('#btn-clear-pos').on('click', function() { $('#clearPos').click(); });
+			$('#btn-clear-neg').on('click', function() { $('#clearNeg').click(); });
+
+			// ---- Save button ----
+			$('#btn-save').on('click', function() {
+				$('button.file-controler-item').filter(function() {
+					return $(this).text().trim() === 'save label';
+				}).click();
+				saveMetadata();
+			});
+
+			// ---- Class dropdown — delegates to annotator when available ----
+			$('#class-select').on('change', function() {
+				var name = $(this).val();
+				if (annoRef && classSubnodeId[name] !== undefined) {
+					annoRef.updateHieHighlight(classSubnodeId[name]);
+					annoRef.classChange = true;
+					annoRef.posPoints = [];
+					annoRef.negPoints = [];
+					if (annoRef.ctxP) {
+						annoRef.ctxP.clearRect(0, 0, annoRef.width, annoRef.height);
+						annoRef.drawRect && annoRef.drawRect(annoRef.ctxP);
+					}
+				}
+			});
+
+			// ---- Fetch fixed classes and populate dropdown ----
+			$.get('/get_classes', function(classes) {
 				classes.forEach(function(cls) {
-					var swatch = '<span class="class-swatch" style="background:' + cls.color + '"></span>';
 					$('#class-select').append(
 						$('<option>').val(cls.name).text(cls.name).attr('data-color', cls.color)
 					);
 				});
 
-				// Wait for annotator to be ready, then wire everything up
+				// Once an image is loaded the annotator is created — set up the hierarchy then.
 				waitForAnnotator(function(anno) {
+					annoRef = anno;
 					setupAutoHierarchy(anno, classes);
-					wireToolbar(anno);
+					// Sync toolbar state to annotator
+					anno.curMode = $('#mode-select').val();
+					anno.curTool = $('[data-tool].active').data('tool') || 'posPen';
+					anno.lineWidth = parseInt($('#brush-size').val());
 				});
 			});
 
-			// Poll until annotator instance is available
+			// Poll until annotator instance exists (created on first image load).
 			function waitForAnnotator(cb) {
 				var t = setInterval(function() {
 					var data = $('#canvas-wrapper').data('annotator');
@@ -297,101 +352,29 @@
 			}
 
 			// For each fixed class, create one object+class pair in the hierarchy.
-			// Object name = class name (one accumulated mask per class; instances
-			// are recovered via connected components at demo_parse time).
+			// One accumulated mask per class; instances recovered via connected
+			// components in demo_parse.py at export time.
 			function setupAutoHierarchy(anno, classes) {
-				// First populate the annotator's class panel (needed for checkboxes in listSC)
 				classes.forEach(function(cls) {
 					var color = cls.color.replace('#', '');
 					anno.addAnnoClass(cls.name, color, null, anno.$selectClassFrame, anno.$errorMsg);
 					anno.addAnnoClassToHiePanel(cls.name, color);
 				});
 
-				// Now create one hierarchy object per class and link its class subnode
 				classes.forEach(function(cls) {
 					var color = cls.color.replace('#', '');
-
-					// Tick the checkbox for this class so addHieBtn includes it
-					// (we replicate addHieBtn's logic directly instead)
 					var item = {name: cls.name, classes: []};
 					anno.addHierarchy(item, anno.$selectHieFrame, anno.$errorHieMsg, anno.$hieOptions);
-					var objId = anno.hieUid; // id assigned to this object node
-
+					var objId = anno.hieUid;
 					anno.addOneSubNode(objId, anno.$selectHieFrame, {name: cls.name, color: color});
-					classSubnodeId[cls.name] = anno.hieUid; // id assigned to class subnode
+					classSubnodeId[cls.name] = anno.hieUid;
 				});
 
 				anno.renderHierarchyFrame();
 
-				// Select first class
-				var firstName = classes[0].name;
-				anno.updateHieHighlight(classSubnodeId[firstName]);
+				// Pre-select first class
+				anno.updateHieHighlight(classSubnodeId[classes[0].name]);
 				anno.classChange = true;
-			}
-
-			function wireToolbar(anno) {
-				// ---- Class dropdown ----
-				$('#class-select').on('change', function() {
-					var name = $(this).val();
-					if (classSubnodeId[name] !== undefined) {
-						anno.updateHieHighlight(classSubnodeId[name]);
-						anno.classChange = true;
-						anno.posPoints = [];
-						anno.negPoints = [];
-						if (anno.ctxP) {
-							anno.ctxP.clearRect(0, 0, anno.width, anno.height);
-							anno.drawRect && anno.drawRect(anno.ctxP);
-						}
-					}
-				});
-
-				// ---- Tool buttons ----
-				$('.tool-btn[data-tool]').on('click', function() {
-					var tool = $(this).data('tool');
-					// mirror what annotator does on toolkit-item click
-					$('.toolkit-item').each(function() {
-						if ($(this).text().trim() === tool) $(this).click();
-					});
-					anno.curTool = tool;
-					// update our button highlights
-					$('.tool-btn[data-tool]').removeClass('active');
-					$(this).addClass('active');
-				});
-
-				// ---- Brush size ----
-				$('#brush-size').on('change', function() {
-					anno.lineWidth = parseInt($(this).val());
-					$('#selWidth').val($(this).val()).trigger('change');
-				});
-
-				// ---- Mode ----
-				$('#mode-select').on('change', function() {
-					anno.curMode = $(this).val();
-					$('#selMode').val($(this).val()).trigger('change');
-				});
-				// Sync initial mode
-				anno.curMode = $('#mode-select').val();
-
-				// ---- Process button ----
-				$('#process-btn').on('click', function() {
-					$('#perform').click();
-				});
-
-				// ---- Undo / Redo / Clear ----
-				$('#btn-undo').on('click', function() { $('#undoHis').click(); });
-				$('#btn-redo').on('click', function() { $('#redoHis').click(); });
-				$('#btn-clear-pos').on('click', function() { $('#clearPos').click(); });
-				$('#btn-clear-neg').on('click', function() { $('#clearNeg').click(); });
-
-				// ---- Save button ----
-				$('#btn-save').on('click', function() {
-					// Trigger the annotator's save label (downloads PNG)
-					$('button.file-controler-item').filter(function() {
-						return $(this).text().trim() === 'save label';
-					}).click();
-					// Save metadata
-					saveMetadata();
-				});
 			}
 
 			// ---- Metadata save ----
