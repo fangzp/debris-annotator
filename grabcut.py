@@ -114,9 +114,18 @@ def handle_action():
 
     # points to construct initial mask
     if mode == "GrabCut":
-        mask = refine_mask_grabcut(imgArr,
-                                   np.zeros([h, w], dtype=np.uint8),
-                                   cfg.GC_iter_count)
+        # GrabCut requires both FG and BG samples in the initial mask.
+        # Start with everything as probable-background, mark positive
+        # strokes as definite foreground, and negative strokes (if any)
+        # as definite background.
+        ini_mask = np.full([h, w], cv2.GC_PR_BGD, dtype=np.uint8)
+        ini_mask = init_mask_from_points(ini_mask, pos_pts, sx=0, sy=0)
+        if len(neg_pts) > 0:
+            for pt in neg_pts:
+                y, x = int(pt[0]), int(pt[1])
+                if 0 <= y < h and 0 <= x < w:
+                    ini_mask[y, x] = cv2.GC_BGD
+        mask = refine_mask_grabcut(imgArr, ini_mask, cfg.GC_iter_count)
         mask = connectivity(mask,
                             pos_pts,
                             sx=0, sy=0)
@@ -196,4 +205,4 @@ def xml_saver():
 
 if __name__ == "__main__":
     from waitress import serve
-    serve(app, host="0.0.0.0", port=5000)
+    serve(app, host="0.0.0.0", port=5001)
