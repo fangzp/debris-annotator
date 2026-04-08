@@ -428,7 +428,7 @@
 
       /* sub-elements for tool kit*/
       var lineWidth = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-      var algorithms = ['DL-ObjectSelect', 'Manual']; //'GrabCut' can add back into options
+      var algorithms = ['GrabCut', 'Manual'];
       var titleTool = $('<p class="module-title">Toolkit</p>')
       //var polygon = $('<span class="toolkit-item" style="font-size: 115%"><i class="fa fa-map-o" aria-hidden="true"></i>&nbsp Polygon</span>');
       var semFile = $('<button style="font-size: 100%" class="toolkit-item" onclick="document.getElementById(\'semFile\').click()">Upload a mask</button> <input type="file" accept="image/*" id="semFile" name="semFile" style="display:none">');
