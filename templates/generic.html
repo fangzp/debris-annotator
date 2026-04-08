@@ -266,25 +266,23 @@
 			// Map class name → hieUid of its class-subnode in the hierarchy tree.
 			var classSubnodeId = {};
 
-			// ---- Tool buttons — wired immediately so they're always responsive ----
+			// ---- Tool buttons — click the hidden .toolkit-item spans exactly as
+			//      the keyboard shortcuts do (guaranteed to work via document delegation)
 			$('.tool-btn[data-tool]').on('click', function() {
 				var tool = $(this).data('tool');
+				$(".toolkit-item:contains('" + tool + "')").click();
 				$('.tool-btn[data-tool]').removeClass('active');
 				$(this).addClass('active');
-				if (annoRef) {
-					annoRef.curTool = tool;
-					annoRef.metaData = [];
-				}
 			});
 
-			// ---- Brush size ----
+			// ---- Brush size — trigger the hidden #selWidth select ----
 			$('#brush-size').on('change', function() {
-				if (annoRef) annoRef.lineWidth = parseInt($(this).val());
+				$('#selWidth').val($(this).val()).trigger('change');
 			});
 
-			// ---- Mode ----
+			// ---- Mode — trigger the hidden #selMode select ----
 			$('#mode-select').on('change', function() {
-				if (annoRef) annoRef.curMode = $(this).val();
+				$('#selMode').val($(this).val()).trigger('change');
 			});
 
 			// ---- Process button ----
@@ -333,10 +331,11 @@
 				waitForAnnotator(function(anno) {
 					annoRef = anno;
 					setupAutoHierarchy(anno, classes);
-					// Sync toolbar state to annotator
-					anno.curMode = $('#mode-select').val();
-					anno.curTool = $('[data-tool].active').data('tool') || 'posPen';
-					anno.lineWidth = parseInt($('#brush-size').val());
+					// Sync toolbar state into the annotator's hidden controls
+					$('#selMode').val($('#mode-select').val()).trigger('change');
+					$('#selWidth').val($('#brush-size').val()).trigger('change');
+					// Activate the default tool (posPen)
+					$(".toolkit-item:contains('posPen')").click();
 				});
 			});
 

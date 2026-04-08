@@ -3436,6 +3436,7 @@
 
   $.fn.annotator = function(wrapperCanvas, pointCanvas, maskCanvas, semCanvas, imgURL, wrapperCanvasCtx, pointCtx, maskCtx, semCtx, images){
     var annotator = new Annotator(wrapperCanvas, pointCanvas, maskCanvas, semCanvas, imgURL, wrapperCanvasCtx, pointCtx, maskCtx, semCtx, images);
+    $(this).data('annotator', annotator);
 
     //var mousetrap = new Mousetrap(annotator)
     Mousetrap.bind({
