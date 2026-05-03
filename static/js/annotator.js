@@ -285,6 +285,9 @@
       self.polygonPoints = new Array();
       self.posPoints = new Array();
       self.negPoints = new Array();
+      // Visibility flags — toggled by 👁+/👁− toolbar buttons
+      self.showPosStrokes = true;
+      self.showNegStrokes = true;
       self.checkedClasses = new Array();
       self.states = new Array();
       self.sendPoly = false;
@@ -1796,35 +1799,39 @@
           return;
       }
       if(!self.checkSelectedHie()){
-        if (!self.curTool == 'Rectangle'){
+        if (self.curTool !== 'Rectangle'){  // B4: was `!curTool == 'Rectangle'` — always false
             return;
         }
       }
-      // event coordinate
-      var x_off = e.pageX - $(canvas).offset().left;
-      var y_off = e.pageY - $(canvas).offset().top;
+      // event coordinate — getBoundingClientRect is viewport-relative and consistent
+      // with clientX/Y, avoiding stale-layout issues that $(canvas).offset() can have
+      var _cr = canvas.getBoundingClientRect();
+      var x_off = e.clientX - _cr.left;
+      var y_off = e.clientY - _cr.top;
 
-      var scaled_x_off = (e.pageX - $(canvas).offset().left) / self.scaleCanvas;
-      var scaled_y_off = (e.pageY - $(canvas).offset().top) / self.scaleCanvas;
+      var scaled_x_off = x_off / self.scaleCanvas;
+      var scaled_y_off = y_off / self.scaleCanvas;
 
       switch(self.curTool){
         case 'posPen':
           if (self.bbox.isBox && !self.withinBbox(scaled_x_off, scaled_y_off)){
-            alert('out from bounding box...');
-            self.mousePressed = false;
+            self.mousePressed = false;  // B3: silently stop painting outside bbox
           }else{
             self.drawLine(x_off, y_off);
           }
           break;
         case 'negPen':
           if (self.bbox.isBox && !self.withinBbox(scaled_x_off, scaled_y_off)){
-            alert('out from bounding box...');
-            self.mousePressed = false;
+            self.mousePressed = false;  // B3: silently stop painting outside bbox
           }else{
             self.drawLine(x_off, y_off);
           }
           break;
         case 'Polygon':
+          break;
+        case 'erasePos':
+        case 'eraseNeg':
+          self.eraseAtPoint(self.curTool, scaled_x_off, scaled_y_off);
           break;
         case 'Rectangle':
           self.updateRectEnd(x_off, y_off);
@@ -1841,13 +1848,15 @@
       if (!self.curTool){
         return;
       }
-      if(self.curTool==='posPen' || self.curTool ==='negPen'){
+      if(self.curTool==='posPen' || self.curTool ==='negPen' ||
+         self.curTool==='erasePos' || self.curTool==='eraseNeg'){
         self.addHistory(self.curTool, 2);
       }
 
       // event coordinate
-      var x_off = e.pageX - $(canvas).offset().left;
-      var y_off = e.pageY - $(canvas).offset().top;
+      var _cr = canvas.getBoundingClientRect();
+      var x_off = e.clientX - _cr.left;
+      var y_off = e.clientY - _cr.top;
 
       switch (self.curTool) {
         case 'posPen':
@@ -1856,6 +1865,12 @@
           }
           break;
         case 'negPen':
+          if (!self.checkSelectedHie()){
+            return;
+          }
+          break;
+        case 'erasePos':
+        case 'eraseNeg':
           if (!self.checkSelectedHie()){
             return;
           }
@@ -1902,16 +1917,16 @@
       }
 
       // event coordinate
-      var x_off = e.pageX - $(canvas).offset().left;
-      var y_off = e.pageY - $(canvas).offset().top;
-      var scaled_x_off = (e.pageX - $(canvas).offset().left) / self.scaleCanvas;
-      var scaled_y_off = (e.pageY - $(canvas).offset().top) / self.scaleCanvas;
+      var _cr = canvas.getBoundingClientRect();
+      var x_off = e.clientX - _cr.left;
+      var y_off = e.clientY - _cr.top;
+      var scaled_x_off = x_off / self.scaleCanvas;
+      var scaled_y_off = y_off / self.scaleCanvas;
 
       switch(self.curTool){
         case 'posPen':
           if (self.bbox.isBox && !self.withinBbox(scaled_x_off, scaled_y_off)){
-            alert('Please draw inside the bounding box...');
-            return;
+            return;  // B3: silently ignore clicks outside bbox
           }
           if (!self.checkSelectedHie()){
             return;
@@ -1920,8 +1935,7 @@
           break;
         case 'negPen':
           if (self.bbox.isBox && !self.withinBbox(scaled_x_off, scaled_y_off)){
-            alert('Please draw inside the bounding box...');
-            return;
+            return;  // B3: silently ignore clicks outside bbox
           }
           if (!self.checkSelectedHie()){
             return;
@@ -1933,8 +1947,7 @@
             return;
           }
           if (self.bbox.isBox && !self.withinBbox(scaled_x_off, scaled_y_off)){
-            alert('Please draw inside the bounding box...');
-            return;
+            return;  // B3: silently ignore clicks outside bbox
           }
 
           // if started a polygon draw
@@ -1994,6 +2007,12 @@
             self.drawPolygon(self.nonscaledCtx);
           }
           break;
+        case 'erasePos':
+        case 'eraseNeg':
+          if (!self.checkSelectedHie()) return;
+          self.mousePressed = true;
+          self.eraseAtPoint(self.curTool, scaled_x_off, scaled_y_off);
+          break;
         case 'Rectangle':
           if(self.bbox.isBox){
             self.clearRectFromCanvas();
@@ -2012,8 +2031,9 @@
         self.addHistory(self.curTool, 2);
       }
       // event coordinate
-      var x_off = e.pageX - $(canvas).offset().left;
-      var y_off = e.pageY - $(canvas).offset().top;
+      var _cr = canvas.getBoundingClientRect();
+      var x_off = e.clientX - _cr.left;
+      var y_off = e.clientY - _cr.top;
 
       switch (self.curTool) {
         case 'Polygon':
@@ -2571,7 +2591,7 @@
 
     drawPosPoints: function(ctx){
         var self = this;
-        if (!self.checkSelectedHie()){
+        if (!self.checkSelectedHie() || !self.showPosStrokes){
           return;
         }
         ctx.fillStyle = "#000000";
@@ -2585,7 +2605,7 @@
 
     drawNegPoints: function(ctx){
         var self = this;
-        if (!self.checkSelectedHie()){
+        if (!self.checkSelectedHie() || !self.showNegStrokes){
           return;
         }
         ctx.fillStyle = "#ff0000";
@@ -2595,6 +2615,29 @@
             ctx.fillRect(point.x, point.y,self.lineWidth,self.lineWidth);
           }
         }
+    },
+
+    // Remove posPoints / negPoints that fall under the eraser brush at (cx, cy).
+    // Uses the current lineWidth as the erase radius so the eraser is the same
+    // apparent size as the painting brush.
+    eraseAtPoint: function(tool, cx, cy){
+        var self = this;
+        var r = Math.max(1, self.lineWidth);
+        if (tool === 'erasePos') {
+            self.posPoints = self.posPoints.filter(function(p){
+                return !(p !== null &&
+                         Math.abs(p.x - cx) <= r &&
+                         Math.abs(p.y - cy) <= r);
+            });
+        } else if (tool === 'eraseNeg') {
+            self.negPoints = self.negPoints.filter(function(p){
+                return !(p !== null &&
+                         Math.abs(p.x - cx) <= r &&
+                         Math.abs(p.y - cy) <= r);
+            });
+        }
+        self.clearRectFromCanvas();
+        if (self.bbox && self.bbox.isBox) self.drawRect(self.ctxP);
     },
 
     clearRectFromCanvas: function(){
@@ -3071,7 +3114,12 @@
           var cls = obj[clsname]
           var coords = cls['coords'];
           var color = null;
-          if(maskType==='class in rgb'){
+          if(maskType==='class index'){
+            var classIdx = (self.classOrder && self.classOrder.length)
+              ? self.classOrder.indexOf(clsname) + 1
+              : 1;
+            color = {'r': classIdx, 'g': classIdx, 'b': classIdx};
+          }else if(maskType==='class in rgb'){
             color = cls['color'];
           }else if(maskType==='object in rgb'){
             var objId = self.findHieNode(objName);

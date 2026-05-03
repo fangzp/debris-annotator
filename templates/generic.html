@@ -34,7 +34,7 @@
 				padding: 3px 6px; border: 1px solid #aaa; border-radius: 3px;
 			}
 			#metadata-form textarea { resize: vertical; height: 36px; width: 180px; }
-			#metadata-form input[readonly] { background: #e8e8e8; color: #555; }
+
 
 			/* ---- Debris toolbar ---- */
 			#debris-toolbar {
@@ -50,17 +50,19 @@
 			}
 			#debris-toolbar label { color: #ccc; font-size: 12px; margin: 0; }
 
-			/* Class dropdown */
-			#class-select {
+			/* Class dropdowns */
+			.class-combo-select {
 				font-size: 13px; font-family: Monaco, monospace;
 				padding: 4px 8px; border-radius: 4px;
 				border: 2px solid #555; background: #333; color: #fff;
-				min-width: 180px;
 			}
-			.class-swatch {
-				display: inline-block; width: 12px; height: 12px;
-				border-radius: 2px; margin-right: 4px; vertical-align: middle;
+			#class-type   { min-width: 110px; }
+			#class-density { min-width: 70px; }
+			/* Image navigation */
+			#chip-nav {
+				display: flex; gap: 6px; align-items: center; margin-left: 8px;
 			}
+			#chip-counter { color: #aaa; font-size: 12px; font-family: Monaco, monospace; min-width: 60px; text-align: center; }
 
 			/* Tool buttons */
 			.tool-btn {
@@ -126,7 +128,7 @@
 				<div id="metadata-form">
 					<div class="field">
 						<label for="meta-chip-id">Chip ID</label>
-						<input type="text" id="meta-chip-id" name="chip_id" readonly placeholder="(load an image)" style="width:160px">
+						<input type="text" id="meta-chip-id" name="chip_id" placeholder="(load an image)" style="width:160px">
 					</div>
 					<div class="field">
 						<label for="meta-labeler-id">Labeler ID <span style="color:red">*</span></label>
@@ -149,38 +151,68 @@
 							<option value="google_basemap">google_basemap</option>
 						</select>
 					</div>
-					<div class="field" style="flex-direction:row; align-items:center; gap:6px">
-						<input type="checkbox" id="meta-uncertain-flag" name="uncertain_flag" style="margin-top:18px">
-						<label for="meta-uncertain-flag" style="margin-top:18px">Uncertain</label>
+					<div class="field">
+						<label for="meta-no-debris">No Debris</label>
+						<select id="meta-no-debris" name="no_debris_type" title="Select if this chip contains no annotatable debris">
+							<option value="">— debris present —</option>
+							<option value="coastal/marine">coastal/marine</option>
+							<option value="intact">intact</option>
+							<option value="forest">forest</option>
+							<option value="other">other (describe in Notes)</option>
+						</select>
 					</div>
 					<div class="field">
 						<label for="meta-notes">Notes (optional)</label>
-						<textarea id="meta-notes" name="notes" placeholder="e.g. mixed debris, cloud cover..."></textarea>
+						<textarea id="meta-notes" name="notes" placeholder="e.g. cloud cover, silt, staging area..."></textarea>
+					</div>
+					<div class="field">
+						<label for="meta-save-dir">Save Directory</label>
+						<input type="text" id="meta-save-dir" name="save_dir" placeholder="./outputs" style="width:200px" title="Server-side path where mask PNG and metadata JSON will be written">
 					</div>
 				</div>
 
 				<!-- Debris annotation toolbar (replaces the Class + Object panels) -->
 				<div id="debris-toolbar">
-					<div>
-						<label for="class-select">Class</label>
-						<select id="class-select">
-							<!-- populated by JS -->
-						</select>
+					<!-- Type + Density dropdowns — combined value drives the hidden #class-select -->
+					<div style="display:flex; gap:6px; align-items:flex-end">
+						<div>
+							<label style="color:#ccc; font-size:12px; display:block">Type</label>
+							<select id="class-type" class="class-combo-select">
+								<option value="Vegetative">Vegetative</option>
+								<option value="C/D">C/D</option>
+								<option value="Other debris">Other debris</option>
+								<option value="Damaged Building">Damaged Building</option>
+								<option value="Uncertain">Uncertain</option>
+							</select>
+						</div>
+						<div id="density-wrapper">
+							<label style="color:#ccc; font-size:12px; display:block">Density</label>
+							<select id="class-density" class="class-combo-select">
+								<option value="Low">Low</option>
+								<option value="High">High</option>
+							</select>
+						</div>
+						<!-- Hidden master select, populated from backend, driven by type+density -->
+						<select id="class-select" style="display:none"></select>
 					</div>
 
-					<div style="display:flex; gap:6px; align-items:center">
+					<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
 						<label style="color:#ccc; font-size:12px">Tool</label>
-						<button class="tool-btn active" id="btn-pospen" data-tool="posPen" title="Paint foreground (what to label)">+ Pen</button>
+						<button class="tool-btn" id="btn-rect" data-tool="Rectangle" title="Draw bounding box around suspected debris first, then paint strokes inside it">&#9633; Box</button>
+						<button class="tool-btn" id="btn-pospen" data-tool="posPen" title="Paint foreground (what to label)">+ Pen</button>
 						<button class="tool-btn" id="btn-negpen" data-tool="negPen" title="Paint background (what NOT to label)">− Pen</button>
-						<button class="tool-btn" id="btn-rect" data-tool="Rectangle" title="Draw bounding box (optional, speeds up GrabCut)">&#9633; Box</button>
+						<button class="tool-btn" id="btn-erase-pos" data-tool="erasePos" title="Erase + (foreground) strokes">Erase+</button>
+						<button class="tool-btn" id="btn-erase-neg" data-tool="eraseNeg" title="Erase − (background) strokes">Erase−</button>
+						<button class="tool-btn" id="btn-toggle-pos" title="Toggle + stroke visibility" style="opacity:1">&#128065;+</button>
+						<button class="tool-btn" id="btn-toggle-neg" title="Toggle − stroke visibility" style="opacity:1">&#128065;−</button>
 					</div>
 
 					<div style="display:flex; gap:4px; align-items:center">
 						<label for="brush-size" style="color:#ccc; font-size:12px">Size</label>
 						<select id="brush-size" class="tool-btn" style="padding:3px 5px; min-width:55px">
 							<option>1</option><option>2</option><option>3</option>
-							<option selected>4</option><option>5</option><option>6</option>
-							<option>7</option><option>8</option><option>9</option><option>10</option>
+							<option>4</option><option>5</option><option>6</option>
+							<option>7</option><option selected>8</option><option>9</option><option>10</option>
 						</select>
 					</div>
 
@@ -206,6 +238,13 @@
 					        title="Save annotation PNG + metadata JSON">
 						&#128190; Save
 					</button>
+
+					<!-- Image navigation (only visible when multiple images are loaded) -->
+					<div id="chip-nav" style="display:none">
+						<button class="tool-btn" id="btn-prev-chip" title="Previous image">&#9664;</button>
+						<span id="chip-counter">1 / 1</span>
+						<button class="tool-btn" id="btn-next-chip" title="Next image">&#9654;</button>
+					</div>
 				</div>
 				<div id="save-status"></div>
 
@@ -243,11 +282,16 @@
 		<script>
 		$(function() {
 
-			// ---- Persist labeler_id ----
+			// ---- Persist labeler_id and save_dir ----
 			var storedId = localStorage.getItem('debris_labeler_id');
 			if (storedId) $('#meta-labeler-id').val(storedId);
 			$('#meta-labeler-id').on('change', function() {
 				localStorage.setItem('debris_labeler_id', $(this).val());
+			});
+			var storedDir = localStorage.getItem('debris_save_dir');
+			if (storedDir) $('#meta-save-dir').val(storedDir);
+			$('#meta-save-dir').on('change', function() {
+				localStorage.setItem('debris_save_dir', $(this).val());
 			});
 
 			// ---- Auto-update chip_id when annotator loads an image ----
@@ -266,13 +310,34 @@
 			// Map class name → hieUid of its class-subnode in the hierarchy tree.
 			var classSubnodeId = {};
 
-			// ---- Tool buttons — click the hidden .toolkit-item spans exactly as
-			//      the keyboard shortcuts do (guaranteed to work via document delegation)
+			// ---- Tool buttons — pen/box/erase tools ----
+			// erasePos/eraseNeg are handled entirely in annotator.js (no .toolkit-item span);
+			// just set annoRef.curTool directly for those.
 			$('.tool-btn[data-tool]').on('click', function() {
 				var tool = $(this).data('tool');
-				$(".toolkit-item:contains('" + tool + "')").click();
+				if (tool === 'erasePos' || tool === 'eraseNeg') {
+					if (annoRef) annoRef.curTool = tool;
+				} else {
+					$(".toolkit-item:contains('" + tool + "')").click();
+				}
 				$('.tool-btn[data-tool]').removeClass('active');
 				$(this).addClass('active');
+			});
+
+			// ---- Visibility toggles for + / − strokes ----
+			$('#btn-toggle-pos').on('click', function() {
+				if (!annoRef) return;
+				annoRef.showPosStrokes = !annoRef.showPosStrokes;
+				$(this).css('opacity', annoRef.showPosStrokes ? '1' : '0.35');
+				annoRef.clearRectFromCanvas();
+				if (annoRef.bbox && annoRef.bbox.isBox) annoRef.drawRect(annoRef.ctxP);
+			});
+			$('#btn-toggle-neg').on('click', function() {
+				if (!annoRef) return;
+				annoRef.showNegStrokes = !annoRef.showNegStrokes;
+				$(this).css('opacity', annoRef.showNegStrokes ? '1' : '0.35');
+				annoRef.clearRectFromCanvas();
+				if (annoRef.bbox && annoRef.bbox.isBox) annoRef.drawRect(annoRef.ctxP);
 			});
 
 			// ---- Brush size — trigger the hidden #selWidth select ----
@@ -298,11 +363,35 @@
 
 			// ---- Save button ----
 			$('#btn-save').on('click', function() {
-				$('button.file-controler-item').filter(function() {
-					return $(this).text().trim() === 'save label';
-				}).click();
+				if (!annoRef) { showSaveStatus('Load an image first.', false); return; }
+				var chipId   = $('#meta-chip-id').val() || 'unknown';
+				var saveDir  = $('#meta-save-dir').val().trim() || './outputs';
+				var pngData  = annoRef.renderMask(annoRef.labelWorking, 'class index');
+				// POST mask PNG to server at the chosen save directory
+				$.ajax({
+					url: '/save_mask', method: 'POST',
+					contentType: 'application/json',
+					data: JSON.stringify({chip_id: chipId, png_data: pngData, save_dir: saveDir}),
+					success: function(r) {
+						showSaveStatus('Mask saved → ' + r.path, true);
+					},
+					error: function() { showSaveStatus('Mask save failed — check server.', false); }
+				});
 				saveMetadata();
 			});
+
+			// Types that carry no Low/High density qualifier (must match config.py NO_DENSITY_TYPES).
+			var NO_DENSITY_TYPES = ['Damaged Building', 'Uncertain'];
+
+			// ---- Type + Density dropdowns → drive the hidden #class-select ----
+			function syncClassSelect() {
+				var type = $('#class-type').val();
+				var noDens = NO_DENSITY_TYPES.indexOf(type) !== -1;
+				$('#density-wrapper').toggle(!noDens);
+				var name = noDens ? type : (type + ' - ' + $('#class-density').val());
+				$('#class-select').val(name).trigger('change');
+			}
+			$('#class-type, #class-density').on('change', syncClassSelect);
 
 			// ---- Class dropdown — delegates to annotator when available ----
 			$('#class-select').on('change', function() {
@@ -319,7 +408,7 @@
 				}
 			});
 
-			// ---- Fetch fixed classes and populate dropdown ----
+			// ---- Fetch fixed classes and populate hidden #class-select ----
 			$.get('/get_classes', function(classes) {
 				classes.forEach(function(cls) {
 					$('#class-select').append(
@@ -330,12 +419,17 @@
 				// Once an image is loaded the annotator is created — set up the hierarchy then.
 				waitForAnnotator(function(anno) {
 					annoRef = anno;
+					anno.classOrder = classes.map(function(c) { return c.name; });
 					setupAutoHierarchy(anno, classes);
 					// Sync toolbar state into the annotator's hidden controls
 					$('#selMode').val($('#mode-select').val()).trigger('change');
 					$('#selWidth').val($('#brush-size').val()).trigger('change');
 					// Activate the default tool (posPen)
 					$(".toolkit-item:contains('posPen')").click();
+					// Drive #class-select from the visible type+density dropdowns
+					syncClassSelect();
+					// Show navigation if more than one image was loaded
+					updateChipNav();
 				});
 			});
 
@@ -385,12 +479,13 @@
 					return;
 				}
 				var payload = {
-					chip_id:       chipId || 'unknown',
-					labeler_id:    labelerId,
-					hazard_type:   $('#meta-hazard-type').val(),
-					pre_event_ref: $('#meta-pre-event-ref').val(),
-					uncertain_flag: $('#meta-uncertain-flag').is(':checked'),
-					notes:         $('#meta-notes').val()
+					chip_id:        chipId || 'unknown',
+					labeler_id:     labelerId,
+					hazard_type:    $('#meta-hazard-type').val(),
+					pre_event_ref:  $('#meta-pre-event-ref').val(),
+					no_debris_type: $('#meta-no-debris').val() || null,
+					notes:          $('#meta-notes').val(),
+					save_dir:       $('#meta-save-dir').val().trim() || './outputs'
 				};
 				$.ajax({
 					url: '/save_metadata', method: 'POST',
@@ -410,6 +505,33 @@
 					.show();
 				setTimeout(function() { $('#save-status').fadeOut(); }, 4000);
 			}
+
+			// ---- Image navigation (prev / next chip) ----
+			// The annotator populates a hidden gallery; we click its items programmatically.
+			function updateChipNav() {
+				var items = $('.image-item');
+				if (items.length > 1) {
+					$('#chip-nav').show();
+				}
+				var curId = annoRef ? annoRef.curImgID : 0;
+				$('#chip-counter').text((curId + 1) + ' / ' + items.length);
+			}
+
+			$('#btn-prev-chip').on('click', function() {
+				if (!annoRef) return;
+				var items = $('.image-item');
+				var idx = Math.max(0, annoRef.curImgID - 1);
+				$(items[idx]).click();
+				setTimeout(updateChipNav, 300);
+			});
+
+			$('#btn-next-chip').on('click', function() {
+				if (!annoRef) return;
+				var items = $('.image-item');
+				var idx = Math.min(items.length - 1, annoRef.curImgID + 1);
+				$(items[idx]).click();
+				setTimeout(updateChipNav, 300);
+			});
 
 		});
 		</script>

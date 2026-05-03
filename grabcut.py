@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 import time
@@ -32,14 +33,31 @@ def get_classes():
 def save_metadata():
     data = request.get_json()
     chip_id = data.get('chip_id', 'unknown')
-    # strip extension for directory name
     chip_dir = chip_id.rsplit('.', 1)[0] if '.' in chip_id else chip_id
-    out_dir = os.path.join('./outputs', chip_dir)
+    save_dir = data.get('save_dir', '').strip() or './outputs'
+    out_dir = os.path.join(save_dir, chip_dir)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, chip_dir + '_metadata.json')
     with open(out_path, 'w') as f:
         json.dump(data, f, indent=2)
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'path': out_path})
+
+@app.route("/save_mask", methods=['POST'])
+def save_mask():
+    data = request.get_json()
+    chip_id = data.get('chip_id', 'unknown')
+    png_data = data.get('png_data', '')    # data:image/png;base64,...
+    save_dir = data.get('save_dir', '').strip() or './outputs'
+    chip_dir = chip_id.rsplit('.', 1)[0] if '.' in chip_id else chip_id
+    out_dir = os.path.join(save_dir, chip_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, chip_dir + '_mask.png')
+    # strip data URL header
+    if ',' in png_data:
+        png_data = png_data.split(',', 1)[1]
+    with open(out_path, 'wb') as f:
+        f.write(base64.b64decode(png_data))
+    return jsonify({'success': True, 'path': out_path})
 
 @app.route("/handle_action", methods=['POST'])
 def handle_action():

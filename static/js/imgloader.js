@@ -29,9 +29,11 @@
       console.log("Calling image loader");
 
       self.$msgBlock = $('<div id = "showMsg"></div>');
-      self.$dragMsg = $('<span id = "dragMsg" class = "theMsg">Drag your image to this block</span>');
-      self.$chooseMsg = $('<span id = "chooseMsg" class = "theMsg">Click here to upload your image</span>');
-      self.$fileSelect = $('<input id = "choose_img" type = "file" name = "mypics[]" multiple>');
+      self.$dragMsg = $('<span id = "dragMsg" class = "theMsg">Drag images or a folder here</span>');
+      self.$chooseMsg = $('<span id = "chooseMsg" class = "theMsg">Click to upload images</span>');
+      self.$fileSelect = $('<input id = "choose_img" type = "file" name = "mypics[]" multiple accept="image/*">');
+      self.$folderSelect = $('<input id = "choose_folder" type = "file" name = "myfolder[]" multiple webkitdirectory accept="image/*" style="display:none">');
+      self.$chooseFolderMsg = $('<span id = "chooseFolderMsg" class = "theMsg" style="font-size:85%; margin-top:4px; cursor:pointer">📁 Load folder</span>');
       self.$imgCanvas = $('<canvas id = "imgCanvas"></canvas>');
       self.$pointCanvas = $('<canvas> id = "pointCanvas"></canvas>');
       self.$semCanvas = $('<canvas> id = "semCanvas"></canvas>');
@@ -40,11 +42,27 @@
       self.$chooseMsg.append(self.$fileSelect);
       self.$msgBlock.append(self.$dragMsg);
       self.$msgBlock.append(self.$chooseMsg);
+      self.$chooseFolderMsg.append(self.$folderSelect);
+      self.$msgBlock.append(self.$chooseFolderMsg);
       self.$ele.append(self.$msgBlock);
 
-      self.$fileSelect.on('change', function(e){        
+      self.$fileSelect.on('change', function(e){
         self.fullData = this.files;
         self.reader(this.files);
+      });
+
+      // Folder-picker button
+      self.$chooseFolderMsg.on('click', function(e){
+        if (!$(e.target).is('input')) {
+          self.$folderSelect.click();
+        }
+      });
+      self.$folderSelect.on('change', function(e){
+        var imgs = self.filterImageFiles(Array.prototype.slice.call(this.files));
+        if (imgs.length === 0) { alert('No image files found in folder.'); return; }
+        imgs.sort(function(a, b){ return a.name.localeCompare(b.name); });
+        self.fullData = imgs;
+        self.reader(imgs);
       });
 
 
@@ -69,17 +87,63 @@
           drop: function(e){
             e.preventDefault();
 
-            // Get data that is dropped.
-            e.dataTransfer = e.originalEvent.dataTransfer;
-            var data = e.dataTransfer.files || e.target.files;
+            var dt = e.originalEvent.dataTransfer;
 
-            if (data.length == 0){
-              return;
-            }
+            // Try the DataTransferItem API first — it can read directory entries.
+            if (dt.items && dt.items.length > 0 && dt.items[0].webkitGetAsEntry) {
+              var files = [];
+              var pending = 0;
 
-            if (self.typeChecks(data)){
-              self.fullData = data;
-              self.reader(data);
+              function checkDone() {
+                if (pending === 0) {
+                  files = self.filterImageFiles(files);
+                  if (files.length === 0) { self.animations('black'); return; }
+                  files.sort(function(a, b){ return a.name.localeCompare(b.name); });
+                  self.fullData = files;
+                  self.reader(files);
+                }
+              }
+
+              function readEntry(entry) {
+                if (entry.isFile) {
+                  pending++;
+                  entry.file(function(f){
+                    files.push(f);
+                    pending--;
+                    checkDone();
+                  });
+                } else if (entry.isDirectory) {
+                  var dirReader = entry.createReader();
+                  pending++;
+                  // readEntries may need multiple calls to get all entries (browser limit ~100)
+                  (function readAll() {
+                    dirReader.readEntries(function(entries) {
+                      if (entries.length === 0) {
+                        pending--;
+                        checkDone();
+                      } else {
+                        entries.forEach(readEntry);
+                        readAll();
+                      }
+                    });
+                  })();
+                }
+              }
+
+              Array.prototype.forEach.call(dt.items, function(item) {
+                var entry = item.webkitGetAsEntry();
+                if (entry) readEntry(entry);
+              });
+
+              if (pending === 0) checkDone();  // all items were synchronously empty
+            } else {
+              // Fallback: plain FileList (no folder support)
+              var data = dt.files;
+              if (!data || data.length === 0) return;
+              if (self.typeChecks(data)){
+                self.fullData = Array.prototype.slice.call(data);
+                self.reader(data);
+              }
             }
           },
           dragenter: function(e){
@@ -93,6 +157,11 @@
       });
     },
 
+    filterImageFiles: function(files) {
+      return files.filter(function(f){
+        return f.type && f.type.indexOf('image') !== -1;
+      });
+    },
     typeChecks: function(files){
       var self = this;
       for (var i = 0; i < files.length; i++){
@@ -105,20 +174,18 @@
         }
       }
       return true;
-
     },
     reader: function(allImg){
       var self = this;
-
+      // allImg may be a FileList or a plain Array
       var reader = new FileReader();
       // After reader got loaded, save data into firstImg properties.
-      $(reader).load(function(e){       
+      $(reader).load(function(e){
         self.firstImg = e.target.result;
         self.render();
         self.hideWrapper();
-      });      
-      reader.readAsDataURL(allImg[0])
-
+      });
+      reader.readAsDataURL(allImg[0]);
     },
     render: function(){
       var self = this;
@@ -231,7 +298,10 @@
         // $('#wrapperDiv').append(self.$semCanvas);
 
 
-        var fileArr = Array.prototype.slice.call(self.fullData);        
+        // fullData may be a FileList or a plain Array (folder drop gives a plain Array)
+        var fileArr = Array.isArray(self.fullData)
+          ? self.fullData
+          : Array.prototype.slice.call(self.fullData);
         self.$ele.annotator(self.$imgCanvas, self.$pointCanvas, self.$maskCanvas, self.$semCanvas, self.firstImg, self.ctx, self.pointCtx, self.maskCtx, self.semCtx, fileArr);
       });
 
